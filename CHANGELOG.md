@@ -1,6 +1,15 @@
 # Changelog
 
 --------------------------------------------
+[0.12.7] - 2025-01-24
+
+* [iOS] More robustness for video renderer. (#1751)
+
+[0.12.6] - 2025-01-20
+
+* [iOS] fix In-app screen recording.
+* [Android] fix: avoid crashes when surfaceTextureHelper is null. (#1743)
+
 [0.12.5+1] - 2025-01-10
 
 * [Web] Added missing `setVideoEffects()` method to `factory_impl.dart`. (not supported for now)
