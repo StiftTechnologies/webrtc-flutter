@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import '../stream_webrtc_flutter.dart';
-import 'native/audio_management.dart';
 
 class Helper {
   static Future<List<MediaDeviceInfo>> enumerateDevices(String type) async {
@@ -178,6 +177,18 @@ class Helper {
       return await WebRTC.invokeMethod('requestCapturePermission');
     } else {
       throw Exception('requestCapturePermission only support for Android');
+    }
+  }
+
+  static Future<bool> enableIOSMultitaskingCameraAccess(bool enable) async {
+    if (WebRTC.platformIsIOS) {
+      return await WebRTC.invokeMethod(
+        'enableIOSMultitaskingCameraAccess',
+        <String, dynamic>{'enable': enable},
+      );
+    } else {
+      throw Exception(
+          'enableIOSMultitaskingCameraAccess is only supported for iOS');
     }
   }
 }
