@@ -8,6 +8,10 @@
 * [Android/iOS] Now using Stream's native WebRTC builds for improved performance and compatibility.
 * [Android] Introduced `AudioProcessingFactoryProvider` and updated `AudioProcessingController` to implement it, enabling enhanced customization of audio processing.
 
+[0.12.12+hotfix.1] - 2025-03-12
+
+* [Android] fix: fixed video not rendered after resume from background.
+
 [0.12.12] - 2025-03-09
 
 * [Android] feat: Migrate to the new Surface API. (#1726)
