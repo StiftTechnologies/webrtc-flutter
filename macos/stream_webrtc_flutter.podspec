@@ -3,7 +3,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'stream_webrtc_flutter'
-  s.version          = '3.1.0'
+  s.version          = '3.2.0'
   s.summary          = 'Flutter WebRTC plugin for macOS.'
   s.description      = <<-DESC
 A new flutter plugin project.
@@ -19,7 +19,7 @@ A new flutter plugin project.
   s.vendored_frameworks = 'Frameworks/StreamWebRTC.xcframework'
   s.prepare_command = <<-CMD
     mkdir -p Frameworks/
-    curl -sL "https://github.com/GetStream/stream-video-swift-webrtc/releases/download/145.9.0/StreamWebRTC.xcframework.zip" -o Frameworks/StreamWebRTC.zip
+    curl -sL "https://github.com/GetStream/stream-video-swift-webrtc/releases/download/145.17.0/StreamWebRTC.xcframework.zip" -o Frameworks/StreamWebRTC.zip
     unzip -o Frameworks/StreamWebRTC.zip -d Frameworks/
     rm Frameworks/StreamWebRTC.zip
   CMD
