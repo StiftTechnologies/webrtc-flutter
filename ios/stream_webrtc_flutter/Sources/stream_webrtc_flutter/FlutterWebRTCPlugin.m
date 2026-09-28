@@ -1,5 +1,7 @@
 #import "include/stream_webrtc_flutter/FlutterWebRTCPlugin.h"
+#if TARGET_OS_IPHONE
 #import "include/stream_webrtc_flutter/AudioUtils.h"
+#endif
 #import "include/stream_webrtc_flutter/CameraUtils.h"
 
 #import "include/stream_webrtc_flutter/AudioManager.h"
@@ -7,11 +9,13 @@
 #import "include/stream_webrtc_flutter/FlutterRTCDataChannel.h"
 #import "include/stream_webrtc_flutter/FlutterRTCDesktopCapturer.h"
 #import "include/stream_webrtc_flutter/FlutterRTCEncryptionManager.h"
-#import "include/stream_webrtc_flutter/FlutterRTCMediaRecorder.h"
 #import "include/stream_webrtc_flutter/FlutterRTCMediaStream.h"
 #import "include/stream_webrtc_flutter/FlutterRTCPeerConnection.h"
+#if TARGET_OS_IPHONE
+#import "include/stream_webrtc_flutter/FlutterRTCMediaRecorder.h"
 #import "include/stream_webrtc_flutter/FlutterRTCVideoPlatformViewController.h"
 #import "include/stream_webrtc_flutter/FlutterRTCVideoPlatformViewFactory.h"
+#endif
 #import "include/stream_webrtc_flutter/FlutterRTCVideoRenderer.h"
 #import "include/stream_webrtc_flutter/ProcessorProvider.h"
 #import "include/stream_webrtc_flutter/VideoEffectProcessor.h"
@@ -125,9 +129,9 @@ void postEvent(FlutterEventSink _Nullable sink, id _Nullable event) {
   AVAudioSessionPort _preferredInput;
 #endif
   AudioManager* _audioManager;
+  BOOL _stereoPlayoutPreferred;
 #if TARGET_OS_IPHONE
   FLutterRTCVideoPlatformViewFactory* _platformViewFactory;
-  BOOL _stereoPlayoutPreferred;
   dispatch_block_t _stereoRefreshDebounceBlock;
 #endif
 
@@ -213,7 +217,9 @@ static FlutterWebRTCPlugin* sharedSingleton;
   self.renders = [NSMutableDictionary new];
   self.videoCapturerStopHandlers = [NSMutableDictionary new];
   self.videoCaptureState = [NSMutableDictionary new];
+#if TARGET_OS_IPHONE
   self.recorders = [NSMutableDictionary new];
+#endif
   self.trackVolumeCache = [NSMutableDictionary new];
   self.pausedTrackVolumes = [NSMutableDictionary new];
   _factories = [NSMutableDictionary new];
@@ -855,8 +861,9 @@ static FlutterWebRTCPlugin* sharedSingleton;
         if (stopHandler) {
           shouldCallResult = NO;
           stopHandler(^{
+            // The stop handler itself clears `videoCapturer`, and only when it
+            // is still the capturer that stopped.
             NSLog(@"video capturer stopped, trackID = %@", videoTrack.trackId);
-            self.videoCapturer = nil;
             result(nil);
           });
           [self.videoCapturerStopHandlers removeObjectForKey:videoTrack.trackId];
@@ -1149,6 +1156,8 @@ static FlutterWebRTCPlugin* sharedSingleton;
     BOOL enable = [argsMap[@"enable"] boolValue];
 
     [self enableMultitaskingCameraAccess:enable result:result];
+  } else if ([@"isIOSMultitaskingCameraAccessSupported" isEqualToString:call.method]) {
+    [self multitaskingCameraAccessSupported:result];
   } else if ([@"mediaStreamTrackHasTorch" isEqualToString:call.method]) {
     NSDictionary* argsMap = call.arguments;
     NSString* trackId = argsMap[@"trackId"];
@@ -2114,10 +2123,12 @@ static FlutterWebRTCPlugin* sharedSingleton;
     }
     dispatch_async(nf.admQueue, ^{
       if (nf.audioSuspended) {
+#if TARGET_OS_IPHONE
         NSDictionary* audioConfigSnapshot = nf.audioConfigSnapshot;
         if (audioConfigSnapshot != nil) {
           [AudioUtils setAppleAudioConfiguration:audioConfigSnapshot];
         }
+#endif
         BOOL restorePlaying = nf.wasPlayingBeforeSuspend;
         BOOL restoreRecording = nf.wasRecordingBeforeSuspend;
         if (restorePlaying) {
@@ -2416,8 +2427,65 @@ static FlutterWebRTCPlugin* sharedSingleton;
   }
 }
 
+/// Applies the remembered multitasking camera access request to the capture
+/// session in use.
+///
+/// A capture session is created per `getUserMedia` call and starts without
+/// multitasking camera access, so the request is applied again every time one
+/// is created.
+- (void)applyMultitaskingCameraAccessToCaptureSession {
+#if !TARGET_OS_OSX
+  if (!self.multitaskingCameraAccessRequested) {
+    return;
+  }
+
+  if (@available(iOS 16.0, *)) {
+    AVCaptureSession* session = self.videoCapturer.captureSession;
+    if (session == nil || !session.isMultitaskingCameraAccessSupported ||
+        session.multitaskingCameraAccessEnabled) {
+      return;
+    }
+
+    @try {
+      [session beginConfiguration];
+      [session setMultitaskingCameraAccessEnabled:YES];
+      [session commitConfiguration];
+    } @catch (NSException* exception) {
+      NSLog(@"applyMultitaskingCameraAccessToCaptureSession: Exception occurred: %@ - %@",
+            exception.name, exception.reason);
+    }
+  }
+#endif
+}
+
+/// Reports whether the capture session in use supports camera access while
+/// multitasking, or nil when there is no capture session to ask.
+- (void)multitaskingCameraAccessSupported:(FlutterResult)result {
+#if TARGET_OS_OSX
+  result(@NO);
+#else
+  if (@available(iOS 16.0, *)) {
+    AVCaptureSession* session = self.videoCapturer.captureSession;
+    if (session == nil) {
+      result(nil);
+      return;
+    }
+
+    result(@(session.isMultitaskingCameraAccessSupported));
+  } else {
+    result(@NO);
+  }
+#endif
+}
+
 - (void)enableMultitaskingCameraAccess:(BOOL)enable result:(FlutterResult)result {
+#if TARGET_OS_OSX
+  NSLog(@"enableMultitaskingCameraAccess: Multitasking camera access is not available on macOS.");
+  result(@NO);
+#else
   @try {
+    self.multitaskingCameraAccessRequested = enable;
+
     AVCaptureSession* session = self.videoCapturer.captureSession;
     if (session == nil) {
       NSLog(@"enableMultitaskingCameraAccess: Capture session is nil.");
@@ -2425,11 +2493,6 @@ static FlutterWebRTCPlugin* sharedSingleton;
       return;
     }
 
-#if TARGET_OS_OSX
-    NSLog(@"enableMultitaskingCameraAccess: Multitasking camera access is not available on macOS.");
-    result(@NO);
-    return;
-#else
     if (@available(iOS 16.0, *)) {
       BOOL shouldChange = session.multitaskingCameraAccessEnabled != enable;
       BOOL canChange = !enable || (enable && session.isMultitaskingCameraAccessSupported);
@@ -2456,12 +2519,12 @@ static FlutterWebRTCPlugin* sharedSingleton;
           @"enableMultitaskingCameraAccess: Multitasking camera access requires iOS 16 or later.");
       result(@NO);
     }
-#endif
   } @catch (NSException* exception) {
     NSLog(@"enableMultitaskingCameraAccess: Exception occurred: %@ - %@", exception.name,
           exception.reason);
     result(@NO);
   }
+#endif
 }
 
 - (void)mediaStreamGetTracks:(NSString*)streamId result:(FlutterResult)result {

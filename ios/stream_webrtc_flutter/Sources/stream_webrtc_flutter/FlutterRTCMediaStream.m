@@ -1,7 +1,9 @@
 #import "include/stream_webrtc_flutter/FlutterRTCMediaStream.h"
 #import <objc/runtime.h>
 #import "AVKit/AVKit.h"
+#if TARGET_OS_IPHONE
 #import "include/stream_webrtc_flutter/AudioUtils.h"
+#endif
 #import "include/stream_webrtc_flutter/CameraUtils.h"
 #import "include/stream_webrtc_flutter/FlutterRTCFrameCapturer.h"
 #import "include/stream_webrtc_flutter/FlutterRTCPeerConnection.h"
@@ -10,9 +12,7 @@
 #import "include/stream_webrtc_flutter/NativePeerConnectionFactory.h"
 #import "include/stream_webrtc_flutter/VideoProcessingAdapter.h"
 #if TARGET_OS_OSX
-// Only present in the common/darwin Classes (macOS-only). The iOS tree is
-// iOS-only at deploy-target level so this import is a no-op there.
-#import "StreamMacAudioDevices.h"
+#import "include/stream_webrtc_flutter/StreamMacAudioDevices.h"
 #endif
 
 @implementation RTCMediaStreamTrack (Flutter)
@@ -84,7 +84,7 @@ typedef void (^NavigatorUserMediaSuccessCallback)(RTCMediaStream* mediaStream);
 #endif
     ];
 
-#if !defined(TARGET_OS_IPHONE)
+#if TARGET_OS_OSX
     if (@available(macOS 13.0, *)) {
       deviceTypes = [deviceTypes arrayByAddingObject:AVCaptureDeviceTypeDeskViewCamera];
     }
@@ -157,7 +157,7 @@ typedef void (^NavigatorUserMediaSuccessCallback)(RTCMediaStream* mediaStream);
     rtcConstraints = [self parseMediaConstraints:[self defaultAudioConstraints]];
   }
 
-#if !defined(TARGET_OS_IPHONE)
+#if TARGET_OS_OSX
   if (audioDeviceId != nil) {
     [self selectAudioInput:audioDeviceId result:nil];
   }
@@ -603,7 +603,15 @@ typedef void (^NavigatorUserMediaSuccessCallback)(RTCMediaStream* mediaStream);
 
     VideoProcessingAdapter* videoProcessingAdapter =
         [[VideoProcessingAdapter alloc] initWithRTCVideoSource:videoSource];
-    self.videoCapturer = [[RTCCameraVideoCapturer alloc] initWithDelegate:videoProcessingAdapter];
+    // Every capturer gets a capture session of its own. The default initialiser
+    // joins the one multi-cam session the WebRTC fork shares across the process
+    // on iPhone, which never removes a capturer's output and removes inputs by
+    // camera rather than by owner: each acquisition then leaks an output, and
+    // stopping an old capturer takes the live one's input with it. A session of
+    // its own goes away with the capturer.
+    self.videoCapturer =
+        [[RTCCameraVideoCapturer alloc] initWithDelegate:videoProcessingAdapter
+                                          captureSession:[[AVCaptureSession alloc] init]];
 
     AVCaptureDeviceFormat* selectedFormat = [self selectFormatForDevice:videoDevice
                                                             targetWidth:targetWidth
@@ -628,13 +636,19 @@ typedef void (^NavigatorUserMediaSuccessCallback)(RTCMediaStream* mediaStream);
       [videoDevice unlockForConfiguration];
     }
 
+    __weak FlutterWebRTCPlugin* weakSelf = self;
     [self.videoCapturer startCaptureWithDevice:videoDevice
                                         format:selectedFormat
                                            fps:selectedFps
                              completionHandler:^(NSError* error) {
                                if (error) {
                                  NSLog(@"Start capture error: %@", [error localizedDescription]);
+                                 return;
                                }
+
+                               // This is a freshly created capture session, so it
+                               // starts without multitasking camera access.
+                               [weakSelf applyMultitaskingCameraAccessToCaptureSession];
                              }];
 
     NSString* trackUUID = [[NSUUID UUID] UUIDString];
@@ -665,7 +679,19 @@ typedef void (^NavigatorUserMediaSuccessCallback)(RTCMediaStream* mediaStream);
 
     self.videoCapturerStopHandlers[videoTrack.trackId] = ^(CompletionHandler handler) {
       NSLog(@"Stop video capturer, trackID %@", videoTrack.trackId);
-      [capturer stopCaptureWithCompletionHandler:handler];
+      [capturer stopCaptureWithCompletionHandler:^{
+        // Let go of the stopped capturer, and with it its capture session, but
+        // only while it is still the current one: a camera recreated since has
+        // already replaced it, and must be kept.
+        RTCCameraVideoCapturer* stoppedCapturer = capturer;
+        dispatch_async(dispatch_get_main_queue(), ^{
+          FlutterWebRTCPlugin* strongSelf = weakSelf;
+          if (stoppedCapturer != nil && strongSelf.videoCapturer == stoppedCapturer) {
+            strongSelf.videoCapturer = nil;
+          }
+        });
+        if (handler) handler();
+      }];
     };
 
     if (!videoDeviceId) {
