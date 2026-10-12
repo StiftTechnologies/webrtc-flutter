@@ -97,16 +97,38 @@ class PeerConnectionObserver implements PeerConnection.Observer, EventChannel.St
   }
 
   void close() {
+    closeNative();
+    onClosed();
+  }
+
+  /**
+   * Frees the native peer connection, including its remote tracks. Main thread
+   * only: renderers use those tracks on the main thread, and freeing them
+   * elsewhere races their sink bookkeeping. Close it with {@link #closeNative()}
+   * first to keep the slow teardown off the main thread; closing again here is
+   * then a no-op.
+   */
+  void dispose() {
+    close();
+    peerConnection.dispose();
+    eventChannel.setStreamHandler(null);
+  }
+
+  /**
+   * Closes the native peer connection. A synchronous call into WebRTC's
+   * signaling thread that waits for the whole teardown, so callers may run it
+   * off the main thread. Follow it with {@link #onClosed()} or
+   * {@link #dispose()} on the main thread.
+   */
+  void closeNative() {
     peerConnection.close();
+  }
+
+  /** Main-thread cleanup after {@link #closeNative()}. */
+  void onClosed() {
     remoteStreams.clear();
     remoteTracks.clear();
     dataChannels.clear();
-  }
-
-  void dispose() {
-    this.close();
-    peerConnection.dispose();
-    eventChannel.setStreamHandler(null);
   }
 
   void createDataChannel(String label, ConstraintsMap config, Result result) {
@@ -762,6 +784,8 @@ class PeerConnectionObserver implements PeerConnection.Observer, EventChannel.St
         Double scaleResolutionDownBy = (Double) encoding.get("scaleResolutionDownBy");
         if (scaleResolutionDownBy != null)
           currentParams.scaleResolutionDownBy = scaleResolutionDownBy;
+        String scalabilityMode = (String) encoding.get("scalabilityMode");
+        if (scalabilityMode != null) currentParams.scalabilityMode = scalabilityMode;
       }
     }
 
@@ -810,6 +834,9 @@ class PeerConnectionObserver implements PeerConnection.Observer, EventChannel.St
       }
       if (encoding.scaleResolutionDownBy != null) {
         map.putDouble("scaleResolutionDownBy", encoding.scaleResolutionDownBy);
+      }
+      if (encoding.scalabilityMode != null) {
+        map.putString("scalabilityMode", encoding.scalabilityMode);
       }
       if (encoding.ssrc != null) {
         map.putLong("ssrc", encoding.ssrc);

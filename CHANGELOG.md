@@ -1,5 +1,18 @@
+[4.0.0] - 2026.10.09
 
-# Changelog
+* [Android] Added the Stream Maven repository (`https://stream-io-repo.com`) to the Android build repositories.
+* [Android] fix: the camera capture format now keeps the requested aspect ratio, so Pixel 6a/8 no longer open 2560x1280 for a 2560x1440 request.
+* [Android] fix: `getUserMedia` now opens the camera on a dedicated thread instead of the main thread. 
+* [Android/iOS/macOS] fix: `peerConnectionClose` and `peerConnectionDispose` now close the peer connection off the main thread, which froze the app for a few hundred milliseconds when leaving a call.
+* [iOS/macOS] fix: detaching the plugin now clears the event sink of every data channel.
+* [iOS] fix: `setAppleAudioConfiguration`, `ensureAudioSession`, `enableSpeakerphone` and `enableSpeakerphoneButPreferBluetooth` now reconfigure the `AVAudioSession` on a serial background queue and reply once it is done, instead of on the main thread.
+* [Android] Migrated the Android module to AGP's built-in Kotlin. The module no longer applies the Kotlin Gradle Plugin (KGP), whose application Android Gradle Plugin 9.0 removed.
+* Increased minimum Flutter version to 3.44.0 (Dart 3.12.0), which is required for the built-in Kotlin migration: from 3.44 Flutter applies KGP to plugin modules that no longer declare it, keeping AGP 8 builds working.
+* [macOS] `getDisplayMedia` can show the system content sharing picker (`SCContentSharingPicker`) when `deviceId.exact` is `system-picker`; check `DesktopCapturer.isSystemContentPickerSupported`. macOS 14 or newer.
+* [Android] Camera track `getSettings()` now reports `width` and `height` in the orientation of the delivered frames instead of the sensor's capture format, so a phone held upright reports a portrait size. The orientation is taken when the track is created. The settings also carry the camera's `sensorOrientation` whenever it is known, which marks the reported size as already in frame orientation.
+* Cloned tracks now inherit the original track's `getSettings()` when the platform reports none for the clone, as Android does.
+* [Android] Device enumeration (`getSources`) no longer runs on the main thread, and camera details are read once instead of on every enumeration.
+* [Android] `onDeviceChange` is now only emitted when the list of audio devices changes.
 
 [3.2.0] - 2026.09.03
 
