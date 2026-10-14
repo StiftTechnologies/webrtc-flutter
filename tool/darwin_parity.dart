@@ -55,7 +55,9 @@ const iosOnly = <String>{
 
 /// Files that exist only in the macOS tree, as paths relative to [macosTree].
 const macosOnly = <String>{
+  'FlutterSCStreamCapturer.m',
   'StreamMacAudioDevices.m',
+  'include/stream_webrtc_flutter/FlutterSCStreamCapturer.h',
   'include/stream_webrtc_flutter/StreamMacAudioDevices.h',
 };
 
@@ -66,7 +68,9 @@ Directory findRepoRoot([Directory? start]) {
     if (File('${dir.path}/pubspec.yaml').existsSync()) return dir;
     final parent = dir.parent;
     if (parent.path == dir.path) {
-      throw StateError('could not find pubspec.yaml above ${Directory.current.path}');
+      throw StateError(
+        'could not find pubspec.yaml above ${Directory.current.path}',
+      );
     }
     dir = parent;
   }
@@ -260,6 +264,8 @@ void main(List<String> args) {
     return;
   }
 
-  stderr.writeln('usage: dart tool/darwin_parity.dart [check | fix --to=macos|ios]');
+  stderr.writeln(
+    'usage: dart tool/darwin_parity.dart [check | fix --to=macos|ios]',
+  );
   exitCode = 2;
 }
