@@ -1,3 +1,16 @@
+[4.0.1] - 2026.10.22
+
+* [iOS/macOS] fix: peer connection operations (SDP, candidates, tracks, transceivers, senders, stats) now run on a serial queue per peer connection instead of the main thread, so joining a call or changing publish quality no longer freezes the app.
+* [iOS/macOS] fix: device enumeration (`getSources`) no longer runs on the main thread.
+* [iOS/macOS] fix: remote track bookkeeping is now updated on the main thread, and peer connection and data channel event sinks are read atomically.
+* [iOS] fix: `createPeerConnectionFactory` applies its `appleAudioConfiguration` on the audio-session queue instead of the main thread.
+* [iOS] fix: `setAppleAudioConfiguration` skips reconfiguring the `AVAudioSession` when it already matches.
+* [iOS] fix: `resumeAudioPeerConnectionFactory` restores the latest `setAppleAudioConfiguration`, so a speaker/earpiece choice survives suspend and resume.
+* [iOS] fix: `selectAudioOutput` and `selectAudioInput` no longer reply twice.
+* [Android] fix: `SIGSEGV` in `VideoTrack.removeSink` when a factory was disposed while a renderer still showed its camera track.
+* [Android] fix: `NullPointerException` in `FlutterRTCVideoRenderer.onFrameResolutionChanged` when an event stream was cancelled mid-frame.
+* [Android] fix: plugin events now reach every listening Flutter engine, not only the last one.
+
 [4.0.0] - 2026.10.09
 
 * [Android] Added the Stream Maven repository (`https://stream-io-repo.com`) to the Android build repositories.
